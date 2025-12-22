@@ -165,7 +165,7 @@ sudo make
 sudo make install
 ```
 
-3. 创建自己的工作空间catkin_ws，在catkin_ws下创建src文件夹，并将本项目的功能包放入src中进行编译：
+3. 创建自己的工作空间catkin_ws，在catkin_ws下创建src文件夹，并将本项目的功能包，也就是VINS-Mono-Preprocessor(ROS1)放入src中进行编译：
 
 ```bash
 cd catkin_ws
