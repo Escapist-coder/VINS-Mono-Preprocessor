@@ -1,5 +1,7 @@
-# BW_multi_sensor_fusion
-# VINS_vi_sync
+# VINS-Mono-Preprocessor(ROS1)
+
+---
+
 # 简介 Introduction
 本系统是基于VINS-Mono改进的视觉-惯性时空一体优化系统，用于解决多传感融合中的硬件时间同步问题。相比于传统的时间标定与空间标定分离，此方案有三大优势：
 1、时间、空间参数在同一目标函数中优化，避免误差在分布标定中累积；
@@ -483,6 +485,3 @@ IMU 数据处理：processIMU()对 IMU 数据进行预积分（IntegrationBase�
 接收重启命令（restart_callback）时，清空缓冲区并重置估计器状态，重新开始估计过程。
 6、结果发布
 处理完成后，发布位姿（pubOdometry）、关键帧（pubKeyframe）、点云（pubPointCloud）、TF 变换（pubTF）等结果，以及中间数据（如两帧间 IMU 数据、时间偏差）。
-
----
-# BW_multi_sensor_fusion
