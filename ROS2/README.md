@@ -86,9 +86,15 @@ colcon build
 
 # 运行步骤 Run
 我们以EuRoC数据集MH_01_easy.bag为例。由于EuRoC数据集均为ROS1格式，故还需要将其转为ROS2格式。
+我们使用rosbag工具来完成转换，打开一个终端，执行如下指令：
+
+```bash
+pip install rosbags
+rosbags-convert MH_01_easy.bag --dst MH_01_ros2
+```
 
 完成转换后，我们执行如下操作：
-打开一个终端，
+打开一个新的终端，
 ```bash
 cd $(PATH_TO_YOUR_ROS2_WS)
 source install/setup.bash
@@ -97,7 +103,7 @@ ros2 launch vins_estimator run_preprocessing.launch.py
 接下来打开另一个终端对数据集进行播放，
 
 ```bash
-ros2 bag play $(PATH_TO_YOUR_DATASET)/MH_01_easy # 格式转换后名字可能变化，请根据自己新得到的bag名称进行修改
+ros2 bag play $(PATH_TO_YOUR_DATASET)/MH_01_ros2 # 格式转换后名字可能变化，请根据自己新得到的bag名称进行修改
 ```
 最后我们再打开一个终端对话题的输出进行验证，
 
@@ -106,3 +112,4 @@ cd $(PATH_TO_YOUR_ROS2_WS)
 source install/setup.bash
 ros2 topic echo /vins/sync_data # Ctrl+C中止，再将话题名换成/aligned_grayscale_image即可查看灰度信息是否输出
 ```
+
