@@ -12,6 +12,7 @@
 #include "parameters.h"
 #include "utility/visualization.h"
 #include "vins_interfaces/msg/imu_sequence.hpp"
+#include "vins_interfaces/msg/vins_sync_data.hpp"
 #include "std_msgs/msg/float64.hpp"
 
 Estimator estimator;
@@ -25,6 +26,7 @@ int sum_of_wait = 0;
 
 rclcpp::Publisher<vins_interfaces::msg::ImuSequence>::SharedPtr pub_inter_imu;
 rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr pub_td;
+rclcpp::Publisher<vins_interfaces::msg::VinsSyncData>::SharedPtr pub_sync_data;
 
 std::mutex m_buf;
 std::mutex m_state;
@@ -225,21 +227,23 @@ void process()
 
         lk.unlock();
         m_estimator.lock();
+        
+        // 遍历每一帧图像及其对应的 IMU 数据包
         for (auto &measurement : measurements)
         {
             auto img_msg = measurement.second;
-            // --- 新增：发布帧间 IMU 数据 ---
-            vins_interfaces::msg::ImuSequence imu_seq;
-            imu_seq.header = img_msg->header;
-            for (auto &imu_msg_ptr : measurement.first) {
-                imu_seq.imu_burst.push_back(*imu_msg_ptr);
-            }
-            pub_inter_imu->publish(imu_seq);
+
+            // ---------------------------------------------------------------
+            // 注意：这里删除了原先的 pub_inter_imu (帧间IMU) 单独发布逻辑
+            // 因为我们将在函数末尾通过 VinsSyncData 统一发布
+            // ---------------------------------------------------------------
+
+            // 1. IMU 预积分处理 (核心逻辑，保持不变)
             double dx = 0, dy = 0, dz = 0, rx = 0, ry = 0, rz = 0;
             for (auto &imu_msg : measurement.first)
             {
-                double t = imu_msg->header.stamp.sec+imu_msg->header.stamp.nanosec * (1e-9);
-                double img_t = img_msg->header.stamp.sec+img_msg->header.stamp.nanosec * (1e-9) + estimator.td;
+                double t = imu_msg->header.stamp.sec + imu_msg->header.stamp.nanosec * (1e-9);
+                double img_t = img_msg->header.stamp.sec + img_msg->header.stamp.nanosec * (1e-9) + estimator.td;
                 if (t <= img_t)
                 { 
                     if (current_time < 0)
@@ -254,8 +258,6 @@ void process()
                     ry = imu_msg->angular_velocity.y;
                     rz = imu_msg->angular_velocity.z;
                     estimator.processIMU(dt, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
-                    //printf("imu: dt:%f a: %f %f %f w: %f %f %f\n",dt, dx, dy, dz, rx, ry, rz);
-
                 }
                 else
                 {
@@ -274,10 +276,10 @@ void process()
                     ry = w1 * ry + w2 * imu_msg->angular_velocity.y;
                     rz = w1 * rz + w2 * imu_msg->angular_velocity.z;
                     estimator.processIMU(dt_1, Vector3d(dx, dy, dz), Vector3d(rx, ry, rz));
-                    //printf("dimu: dt:%f a: %f %f %f w: %f %f %f\n",dt_1, dx, dy, dz, rx, ry, rz);
                 }
             }
-            // set relocalization frame
+
+            // 2. 重定位帧逻辑 (保持不变)
             sensor_msgs::msg::PointCloud::SharedPtr relo_msg = NULL;
             while (!relo_buf.empty())
             {
@@ -287,7 +289,7 @@ void process()
             if (relo_msg != NULL)
             {
                 vector<Vector3d> match_points;
-                double frame_stamp = relo_msg->header.stamp.sec+relo_msg->header.stamp.nanosec * (1e-9);
+                double frame_stamp = relo_msg->header.stamp.sec + relo_msg->header.stamp.nanosec * (1e-9);
                 for (unsigned int i = 0; i < relo_msg->points.size(); i++)
                 {
                     Vector3d u_v_id;
@@ -304,8 +306,9 @@ void process()
                 estimator.setReloFrame(frame_stamp, frame_index, match_points, relo_t, relo_r);
             }
 
-            RCUTILS_LOG_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.sec+img_msg->header.stamp.nanosec * (1e-9));
+            RCUTILS_LOG_DEBUG("processing vision data with stamp %f \n", img_msg->header.stamp.sec + img_msg->header.stamp.nanosec * (1e-9));
 
+            // 3. 构建图像特征数据并执行优化 (保持不变)
             TicToc t_s;
             map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> image;
             for (unsigned int i = 0; i < img_msg->points.size(); i++)
@@ -325,8 +328,31 @@ void process()
                 xyz_uv_velocity << x, y, z, p_u, p_v, velocity_x, velocity_y;
                 image[feature_id].emplace_back(camera_id,  xyz_uv_velocity);
             }
+            
+            // 执行 VINS 核心优化！此时 estimator.td 会更新
             estimator.processImage(image, img_msg->header);
 
+            // ==========================================
+            // 【新增】构建并发布合并后的 VinsSyncData
+            // ==========================================
+            if (pub_sync_data != nullptr) 
+            {
+                vins_interfaces::msg::VinsSyncData sync_msg;
+                sync_msg.header = img_msg->header; // 继承图像 Header
+                sync_msg.td = estimator.td;        // 填入优化后的最新 td
+
+                // 填入本帧对应的 IMU 数据包
+                for (auto &imu_msg_ptr : measurement.first) {
+                    sync_msg.imu_data.push_back(*imu_msg_ptr);
+                }
+
+                // 发布
+                pub_sync_data->publish(sync_msg);
+            }
+
+            // ==========================================
+            // 【保留】原有的可视化逻辑 (RViz相关)
+            // ==========================================
             double whole_t = t_s.toc();
             printStatistics(estimator, whole_t);
             std_msgs::msg::Header header = img_msg->header;
@@ -340,13 +366,12 @@ void process()
             pubKeyframe(estimator);
             if (relo_msg != NULL)
                 pubRelocalization(estimator);
-            // --- 新增：发布在线估计的时间延迟 ---
-            std_msgs::msg::Float64 td_msg;
-            td_msg.data = estimator.td;
-            pub_td->publish(td_msg);
-            //RCUTILS_LOG_ERROR("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
+
+            // 注意：这里删除了原本单独发布 pub_td 的逻辑，因为 td 已经包含在 VinsSyncData 里了
+            // RCUTILS_LOG_ERROR("end: %f, at %f", img_msg->header.stamp.toSec(), ros::Time::now().toSec());
         }
         m_estimator.unlock();
+        
         m_buf.lock();
         m_state.lock();
         if (estimator.solver_flag == Estimator::SolverFlag::NON_LINEAR)
@@ -373,6 +398,7 @@ int main(int argc, char **argv)
 
     pub_inter_imu = n->create_publisher<vins_interfaces::msg::ImuSequence>("/inter_frame", 100);
     pub_td = n->create_publisher<std_msgs::msg::Float64>("/current_td", 100);
+    pub_sync_data = n->create_publisher<vins_interfaces::msg::VinsSyncData>("/vins/sync_data", 100);
 
     auto sub_imu = n->create_subscription<sensor_msgs::msg::Imu>(IMU_TOPIC, rclcpp::QoS(rclcpp::KeepLast(2000)), imu_callback);
     auto sub_image = n->create_subscription<sensor_msgs::msg::PointCloud>("/feature_tracker/feature", rclcpp::QoS(rclcpp::KeepLast(2000)), feature_callback);

@@ -8,6 +8,7 @@ find_package(std_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ImuSequence.msg"
+  "msg/VinsSyncData.msg"
   DEPENDENCIES sensor_msgs std_msgs
 )
 

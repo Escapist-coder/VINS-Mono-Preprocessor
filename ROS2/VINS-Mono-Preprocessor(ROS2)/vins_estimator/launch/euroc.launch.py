@@ -37,27 +37,9 @@ def generate_launch_description():
         }]
     )
 
-    # Define the pose_graph node
-    pose_graph_node = Node(
-        package='pose_graph',
-        executable='pose_graph',
-        name='pose_graph',
-        namespace='pose_graph',
-        output='screen',
-        parameters=[{
-            'config_file': config_path,
-            'support_file': support_path,
-            'visualization_shift_x': 0,
-            'visualization_shift_y': 0,
-            'skip_cnt': 0,
-            'skip_dis': 0.0
-        }]
-    )
-
     return LaunchDescription([
         LogInfo(msg=['[vins estimator launch] config path: ', config_path]),
         LogInfo(msg=['[vins estimator launch] vins path: ', vins_path]),
         LogInfo(msg=['[vins estimator launch] support path: ', support_path]),
         vins_estimator_node,
-        pose_graph_node
     ])

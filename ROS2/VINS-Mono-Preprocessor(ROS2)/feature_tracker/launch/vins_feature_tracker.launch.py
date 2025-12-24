@@ -32,21 +32,7 @@ def generate_launch_description():
         }]
     )
 
-    rviz_config_path = PathJoinSubstitution([
-        config_pkg_path,
-        'config/vins_euroc_rviz.rviz'
-    ])
-
-    rviz_node = Node(
-        package='rviz2',
-        executable='rviz2',
-        name='rviz2',
-        arguments=['-d', rviz_config_path],
-        output='screen'
-    )
-
     return LaunchDescription([
         LogInfo(msg=['[feature tracker launch] config path: ', config_path]),
-        feature_tracker_node,
-        rviz_node
+        feature_tracker_node
     ])
