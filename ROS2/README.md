@@ -110,6 +110,4 @@ ros2 bag play $(PATH_TO_YOUR_DATASET)/MH_01_ros2 # 格式转换后名字可能�
 ```bash
 cd $(PATH_TO_YOUR_ROS2_WS)
 source install/setup.bash
-ros2 topic echo /vins/sync_data # Ctrl+C中止，再将话题名换成/aligned_grayscale_image即可查看灰度信息是否输出
-```
-
+ros2 topic echo /vins/sync_data # Ctrl+
